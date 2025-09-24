@@ -1,3 +1,20 @@
+/*
+@name: _Bookmark
+@version: 1.0
+
+This script is provided "as is" and is free to use, modify, and distribute without restriction.
+
+Legal stuff:
+This script is provided without any warranty, expressed or implied. 
+The author shall not be held liable for any damages arising from the use of this script.
+
+You are free to use, modify, and redistribute this script for any purpose, 
+including commercial projects, without asking for permission.
+Attribution is appreciated but not required.
+
+Author: Sominic
+*/
+
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
@@ -7,7 +24,7 @@ using System.IO;
 
 public class _Bookmark : EditorWindow
 {
-    public enum AssetGroupType { Material, Texture, Mesh, Prefab, Scene }
+    public enum AssetGroupType { Material, Texture, Mesh, Prefab, Scene, Shader }
 
     private readonly string[] _mainHeaders = new[] { "Project Finder", "Settings" };
 	
@@ -22,6 +39,7 @@ public class _Bookmark : EditorWindow
 
     private Dictionary<AssetGroupType, FavoriteGroup> groupDict = new();
     private Dictionary<AssetGroupType, List<TagInfo>> tagDict = new();
+	private Dictionary<string, Texture2D> thumbnailCache = new Dictionary<string, Texture2D>();
     private List<string> selectedTags = new();
     private string newTagName = string.Empty;
     private string searchKeyword = string.Empty;
@@ -40,9 +58,10 @@ public class _Bookmark : EditorWindow
 	private Stack<SaveWrapper> redoStack = new();
 
 	private string thumbSaveRoot => @"D:\00_PresetBackup\@Unity\@Editor_Json\_BookmarkData_Thumbnail";
-	private Dictionary<string, string> prefabThumbnailMap = new();
+	private Dictionary<string, string> customThumbnailMap = new(); // GUID -> 썸네일 파일 경로 (Prefab/Scene 공통)
 
-    [MenuItem("Tools/@FX Tools/_Bookmark")]
+
+    [MenuItem("Tools/@FX_Tools/_Bookmark")]
     public static void ShowWindow()
 {
     var window = GetWindow<_Bookmark>();
@@ -59,22 +78,24 @@ public class _Bookmark : EditorWindow
         if (!tagDict.ContainsKey(type)) tagDict[type] = new List<TagInfo>();
     }
     if (!Directory.Exists(thumbSaveRoot)) Directory.CreateDirectory(thumbSaveRoot);
-    LoadPrefabThumbnails();
+    LoadCustomThumbnails();
+
 }
 
-private void LoadPrefabThumbnails()
+private void LoadCustomThumbnails()
 {
-    prefabThumbnailMap.Clear();
+    customThumbnailMap.Clear();
     if (!Directory.Exists(thumbSaveRoot)) return;
-    foreach (var file in Directory.GetFiles(thumbSaveRoot, "*_Thumbnail.png"))
+
+    var prefabGuids = new HashSet<string>(groupDict[AssetGroupType.Prefab].assets.Select(a => a.guid));
+    var sceneGuids  = new HashSet<string>(groupDict[AssetGroupType.Scene].assets.Select(a => a.guid));
+
+    foreach (var file in Directory.GetFiles(thumbSaveRoot, "*.png"))
     {
-        string fileName = Path.GetFileNameWithoutExtension(file);
-        string prefabName = fileName.Replace("_Thumbnail", "");
-        // guid 찾기
-        string guid = groupDict[AssetGroupType.Prefab].assets
-            .FirstOrDefault(fav => AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(AssetDatabase.GUIDToAssetPath(fav.guid))?.name == prefabName)?.guid;
-        if (!string.IsNullOrEmpty(guid))
-            prefabThumbnailMap[guid] = file;
+        string guid = Path.GetFileNameWithoutExtension(file);
+        // Prefab 또는 Scene에 등록된 GUID만 매핑
+        if (prefabGuids.Contains(guid) || sceneGuids.Contains(guid))
+            customThumbnailMap[guid] = file;
     }
 }
 
@@ -108,11 +129,36 @@ private void CaptureSceneViewToThumbnail(string prefabName, string guid)
     Object.DestroyImmediate(rt);
 
     byte[] bytes = screenShot.EncodeToPNG();
-    string savePath = Path.Combine(thumbSaveRoot, prefabName + "_Thumbnail.png");
+    // 썸네일 파일 이름을 GUID로 지정합니다.
+    string savePath = Path.Combine(thumbSaveRoot, guid + ".png");
     File.WriteAllBytes(savePath, bytes);
     AssetDatabase.Refresh();
 
-    prefabThumbnailMap[guid] = savePath;
+    customThumbnailMap[guid] = savePath;
+
+}
+
+private void RefreshThumbnail(string newPrefabName)
+{
+    string thumbnailFolder = @"D:\00_PresetBackup\@Unity\@Editor_Json\_BookmarkData_Thumbnail";
+    string thumbnailPath = Path.Combine(thumbnailFolder, newPrefabName + "_Thumbnail.png");
+
+    if (File.Exists(thumbnailPath))
+    {
+        byte[] fileData = File.ReadAllBytes(thumbnailPath);
+        Texture2D tex = new Texture2D(2, 2);
+        tex.LoadImage(fileData); // PNG → Texture2D
+        tex.Apply();
+
+        // 썸네일 Dictionary나 리스트에 Texture 다시 등록
+        if (thumbnailCache.ContainsKey(newPrefabName))
+            thumbnailCache[newPrefabName] = tex;
+        else
+            thumbnailCache.Add(newPrefabName, tex);
+
+        // 에디터 UI 즉시 갱신
+        Repaint();
+    }
 }
 
     private void OnGUI()
@@ -120,9 +166,18 @@ private void CaptureSceneViewToThumbnail(string prefabName, string guid)
     selectedGroup = (AssetGroupType)GUILayout.Toolbar((int)selectedGroup, System.Enum.GetNames(typeof(AssetGroupType)));
     GUILayout.Space(10);
 
-    GUILayout.Label("에셋 이름 검색:", EditorStyles.boldLabel);
-    searchKeyword = EditorGUILayout.TextField(searchKeyword);
-    GUILayout.Space(5);
+	// 가로 배치: [에셋 이름 검색] [텍스트필드]
+using (new EditorGUILayout.HorizontalScope())
+{
+    GUILayout.Label("에셋 이름 검색", GUILayout.Width(90));
+    var newKeyword = EditorGUILayout.TextField(searchKeyword, GUILayout.ExpandWidth(true));
+    if (newKeyword != searchKeyword)
+    {
+        searchKeyword = newKeyword;
+        Repaint(); // (선택) 입력 시 즉시 갱신
+    }
+}
+GUILayout.Space(5);
 
 	DrawSettingsTags();
     GUILayout.Space(10);
@@ -290,9 +345,7 @@ private void AddNewTag()
 
     scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
     GUILayout.BeginHorizontal();
-
     GUILayout.Label($"{selectedGroup} 그룹", EditorStyles.boldLabel);
-
     GUIStyle iconButtonStyle = new GUIStyle(GUI.skin.button)
     {
         fontSize = 24,
@@ -306,20 +359,18 @@ private void AddNewTag()
 
     Color prevColor = GUI.backgroundColor;
     GUI.backgroundColor = new Color(1.0f, 0.4f, 0.4f);
-
-    if (GUILayout.Button("Json경로", saveButtonStyle, GUILayout.Width(70), GUILayout.Height(25)))
-{
-    if (File.Exists(savePath))
-        EditorUtility.RevealInFinder(savePath); // ✅ 파일 직접 지정
-    else
+    if (GUILayout.Button("☰Json", saveButtonStyle, GUILayout.Width(70), GUILayout.Height(25)))
     {
-        string folder = Path.GetDirectoryName(savePath);
-        if (Directory.Exists(folder)) EditorUtility.RevealInFinder(folder);
+        if (File.Exists(savePath))
+            EditorUtility.RevealInFinder(savePath);
+        else
+        {
+            string folder = Path.GetDirectoryName(savePath);
+            if (Directory.Exists(folder)) EditorUtility.RevealInFinder(folder);
+        }
     }
-}
-
-    if (GUILayout.Button("↶", iconButtonStyle, GUILayout.Width(40), GUILayout.Height(25))) Undo();
-    if (GUILayout.Button("↷", iconButtonStyle, GUILayout.Width(40), GUILayout.Height(25))) Redo();
+    if (GUILayout.Button("↶", iconButtonStyle, GUILayout.Width(30), GUILayout.Height(25))) Undo();
+    if (GUILayout.Button("↷", iconButtonStyle, GUILayout.Width(30), GUILayout.Height(25))) Redo();
     if (GUILayout.Button("설정 저장", saveButtonStyle, GUILayout.Width(70), GUILayout.Height(25))) SaveData();
 
     GUI.backgroundColor = prevColor;
@@ -327,212 +378,230 @@ private void AddNewTag()
 
     float totalMargin = 40f;
     float cardWidth = (EditorGUIUtility.currentViewWidth - totalMargin) / columns;
-    int i = 0;
 
-    while (i < list.Count)
-    {
+    // 1) 먼저 필터링된 목록을 만든다 (여기서 continue 사용 금지)
+var filtered = new List<FavoriteAsset>();
+for (int i = 0; i < list.Count; i++)
+{
+    var fav = list[i];
+    var path = AssetDatabase.GUIDToAssetPath(fav.guid);
+    var obj  = AssetDatabase.LoadAssetAtPath<Object>(path);
+
+    bool pass =
+        obj != null &&
+        (string.IsNullOrEmpty(searchKeyword) ||
+         obj.name.ToLowerInvariant().Contains(searchKeyword.ToLowerInvariant())) &&
+        (selectedTags.Count == 0 || fav.tags.Any(t => selectedTags.Contains(t)));
+
+    if (pass) filtered.Add(fav);
+}
+
+// 2) 필터링된 목록을 기준으로 행을 정확히 열고 닫는다
+for (int idx = 0; idx < filtered.Count; idx++)
+{
+    var fav  = filtered[idx];
+    var path = AssetDatabase.GUIDToAssetPath(fav.guid);
+    var obj  = AssetDatabase.LoadAssetAtPath<Object>(path);
+
+    if (idx % columns == 0)
         EditorGUILayout.BeginHorizontal();
 
-        for (int col = 0; col < columns && i < list.Count; col++)
-        {
-            var fav = list[i];
-            var path = AssetDatabase.GUIDToAssetPath(fav.guid);
-            var obj = AssetDatabase.LoadAssetAtPath<Object>(path);
+    // ===== 여기부터 '카드 그리기' 본문은 기존 그대로 복사 =====
+    GUILayout.BeginVertical("box", GUILayout.Width(cardWidth));
+    EditorGUILayout.BeginHorizontal();
 
-            if (obj == null ||
-                (!string.IsNullOrEmpty(searchKeyword) && !obj.name.ToLowerInvariant().Contains(searchKeyword.ToLowerInvariant())) ||
-                (selectedTags.Count > 0 && !fav.tags.Any(t => selectedTags.Contains(t))))
-            {
-                i++;
-                col--;
-                continue;
-            }
-
-            GUILayout.BeginVertical("box", GUILayout.Width(cardWidth));
-            EditorGUILayout.BeginHorizontal();
-
-            Rect dragRect = GUILayoutUtility.GetRect(16, 64, GUILayout.Width(16), GUILayout.Height(64));
-            EditorGUI.LabelField(dragRect, new GUIContent("≡"), new GUIStyle(EditorStyles.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 12
-            });
-
-            if (Event.current.type == EventType.MouseDown && dragRect.Contains(Event.current.mousePosition))
-            {
-                DragAndDrop.PrepareStartDrag();
-                DragAndDrop.SetGenericData("DraggedItem", fav);
-                DragAndDrop.StartDrag("Drag");
-                Event.current.Use();
-            }
-            if (Event.current.type == EventType.DragUpdated && dragRect.Contains(Event.current.mousePosition))
-            {
-                DragAndDrop.visualMode = DragAndDropVisualMode.Move;
-                Event.current.Use();
-            }
-            if (Event.current.type == EventType.DragPerform && dragRect.Contains(Event.current.mousePosition))
-            {
-                var dragged = DragAndDrop.GetGenericData("DraggedItem") as FavoriteAsset;
-                if (dragged != null && dragged != fav)
-                {
-                    list.Remove(dragged);
-                    list.Insert(i, dragged);
-                    if (autoSave) SaveData();
-                }
-                DragAndDrop.SetGenericData("DraggedItem", null);
-                DragAndDrop.AcceptDrag();
-                Event.current.Use();
-            }
-
-string objGuid = fav.guid;
-Texture2D tex = null;
-
-// 1. Prefab 썸네일(씬뷰 캡처) 최우선
-if (selectedGroup == AssetGroupType.Prefab &&
-    prefabThumbnailMap.TryGetValue(objGuid, out var customThumbPath) && File.Exists(customThumbPath))
-{
-    byte[] fileData = File.ReadAllBytes(customThumbPath);
-    tex = new Texture2D(2, 2);
-    tex.LoadImage(fileData);
-}
-// 2. Material(mainTexture 강제 적용 포함)
-else if (obj is Material mat && mat.shader != null &&
-         mat.shader.name.ToLowerInvariant().Contains("ui") && mat.mainTexture is Texture2D tex2D)
-{
-    tex = tex2D;
-}
-// 3. 기본 AssetPreview (머터리얼, 텍스처 등)
-else
-{
-    var preview = AssetPreview.GetAssetPreview(obj) ?? AssetPreview.GetMiniThumbnail(obj);
-    tex = preview as Texture2D;
-}
-
-            var previewRect = GUILayoutUtility.GetRect(64, 64, GUILayout.Width(64), GUILayout.Height(64));
-            if (tex != null)
-            {
-                GUI.DrawTexture(previewRect, tex, ScaleMode.ScaleToFit);
-                if (Event.current.type == EventType.MouseDown && previewRect.Contains(Event.current.mousePosition))
-                {
-                    DragAndDrop.PrepareStartDrag();
-                    DragAndDrop.objectReferences = new Object[] { obj };
-                    DragAndDrop.StartDrag("Dragging " + obj.name);
-                    Event.current.Use();
-                }
-            }
-
-            if (obj is Material matCheck && matCheck.shader != null && matCheck.shader.name.ToLowerInvariant().Contains("ui"))
-                DrawOutline(previewRect, Color.yellow);
-
-            if (fav.tags.Contains("사용X"))
-            {
-                Handles.BeginGUI();
-                Handles.color = Color.red;
-float thickness = 2f;
-
-Vector3 topLeft = new Vector3(previewRect.xMin, previewRect.yMin);
-Vector3 bottomRight = new Vector3(previewRect.xMax, previewRect.yMax);
-Vector3 topRight = new Vector3(previewRect.xMax, previewRect.yMin);
-Vector3 bottomLeft = new Vector3(previewRect.xMin, previewRect.yMax);
-
-Handles.DrawAAPolyLine(thickness, topLeft, bottomRight);
-Handles.DrawAAPolyLine(thickness, topRight, bottomLeft);
-                Handles.EndGUI();
-            }
-
-            if (fav.guid == highlightGuid && EditorApplication.timeSinceStartup - highlightStartTime < 1.5f)
-            {
-                float t = (float)(EditorApplication.timeSinceStartup - highlightStartTime);
-                float alpha = Mathf.Sin(t * Mathf.PI * 2) * 0.5f + 0.5f;
-                Color glow = Color.Lerp(Color.white, Color.cyan, alpha);
-                DrawOutline(previewRect, glow);
-                Repaint();
-            }
-
-            GUILayout.Space(8);
-            GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.ObjectField(obj, typeof(Object), false);
-            if (GUILayout.Button("X", GUILayout.Width(20)))
-            {
-                SaveStateToUndo();
-                list.Remove(fav);
-                if (autoSave) SaveData();
-                GUIUtility.ExitGUI();
-            }
-            EditorGUILayout.EndHorizontal();
-
-            if (obj is Material shaderMat && shaderMat.shader != null)
-            {
-                string shaderName = shaderMat.shader.name;
-                GUIStyle shaderStyle = new GUIStyle(EditorStyles.label) { fontSize = 10 };
-                shaderStyle.normal.textColor = shaderName.ToLowerInvariant().Contains("additive") ? Color.yellow :
-                                               shaderName.ToLowerInvariant().Contains("alpha") ? Color.cyan : new Color(0.75f, 0.75f, 0.75f);
-                GUILayout.Label(shaderName, shaderStyle);
-            }
-
-            float width = cardWidth - 50 - 32;
-            float x = 0, y = 0, tagHeight = 18, margin = 4;
-            Rect tagStart = GUILayoutUtility.GetRect(width, 0);
-			
-			Rect arrowRect = new Rect(tagStart.x + x, tagStart.y + y, 20, tagHeight);
-            if (EditorGUI.DropdownButton(arrowRect, new GUIContent("▾"), FocusType.Passive, EditorStyles.popup))
-            {
-                var sortedTags = tagDict[selectedGroup].OrderBy(t => t.name).ToList();
-                float totalHeight = Mathf.Min(400, sortedTags.Count * 24 + 10);
-                PopupWindow.Show(arrowRect, new TagPopupPicker(fav, sortedTags, autoSave, totalHeight));
-            }
-			x += 24; // ▼ 버튼 오른쪽 여백 확보
-            foreach (var tagName in fav.tags.OrderBy(n => n))
-            {
-                var tagInfo = tagDict[selectedGroup].FirstOrDefault(t => t.name == tagName);
-                if (tagInfo == null) continue;
-                Vector2 size = GUI.skin.box.CalcSize(new GUIContent(tagName));
-                if (x + size.x > width) { x = 0; y += tagHeight + margin; }
-                Rect rect = new Rect(tagStart.x + x, tagStart.y + y, size.x, tagHeight);
-                x += size.x + margin;
-                Color prevClr = GUI.backgroundColor;
-                GUI.backgroundColor = tagInfo.color.ToColor();
-                GUIStyle style = new GUIStyle(GUI.skin.box)
-                {
-                    normal = { textColor = Color.white },
-                    alignment = TextAnchor.MiddleCenter,
-                    fontSize = 10
-                };
-                GUI.Box(rect, tagName, style);
-                GUI.backgroundColor = prevClr;
-            }
-
-            if (fav.tags.Count > 0)
-                GUILayout.Space(y + tagHeight + margin);
-
-            GUILayout.EndVertical();
-			
-	
-            EditorGUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-			// ★★★ 카드 영역 rect 구해서 CA 버튼 표시
-if (selectedGroup == AssetGroupType.Prefab)
-{
-    Rect cardRect = GUILayoutUtility.GetLastRect();
-    float btnW = 26f, btnH = 16f;
-    float btnX = cardRect.xMax - btnW - 4;
-    float btnY = cardRect.yMax - btnH - 4;
-    Rect caBtnRect = new Rect(btnX, btnY, btnW, btnH);
-
-    if (GUI.Button(caBtnRect, "⦿"))
+    // Drag icon
+    Rect dragRect = GUILayoutUtility.GetRect(16, 64, GUILayout.Width(16), GUILayout.Height(64));
+    EditorGUI.LabelField(dragRect, new GUIContent("≡"), new GUIStyle(EditorStyles.label)
     {
-        CaptureSceneViewToThumbnail(obj.name, fav.guid);
-        LoadPrefabThumbnails(); // 캡처 후 바로 새로고침
+        alignment = TextAnchor.MiddleCenter,
+        fontSize = 12
+    });
+
+    if (Event.current.type == EventType.MouseDown && dragRect.Contains(Event.current.mousePosition))
+    {
+        DragAndDrop.PrepareStartDrag();
+        DragAndDrop.SetGenericData("DraggedItem", fav);
+        DragAndDrop.StartDrag("Drag");
+        Event.current.Use();
+    }
+    if (Event.current.type == EventType.DragUpdated && dragRect.Contains(Event.current.mousePosition))
+    {
+        DragAndDrop.visualMode = DragAndDropVisualMode.Move;
+        Event.current.Use();
+    }
+    if (Event.current.type == EventType.DragPerform && dragRect.Contains(Event.current.mousePosition))
+    {
+        var dragged = DragAndDrop.GetGenericData("DraggedItem") as FavoriteAsset;
+        if (dragged != null && dragged != fav)
+        {
+            list.Remove(dragged);
+            // filtered의 인덱스(idx)를 list의 인덱스로 역변환하기 어렵기 때문에
+            // 안전하게 현재 fav의 list상 인덱스 위치로 삽입
+            int insertAt = list.FindIndex(a => a.guid == fav.guid);
+            if (insertAt < 0) insertAt = list.Count;
+            list.Insert(insertAt, dragged);
+            if (autoSave) SaveData();
+        }
+        DragAndDrop.SetGenericData("DraggedItem", null);
+        DragAndDrop.AcceptDrag();
+        Event.current.Use();
+    }
+
+    string objGuid = fav.guid;
+    Texture2D tex = null;
+
+    // 1. Prefab/Scene 커스텀 썸네일
+    if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.Scene) &&
+        customThumbnailMap.TryGetValue(objGuid, out var customThumbPath) && File.Exists(customThumbPath))
+    {
+        byte[] fileData = File.ReadAllBytes(customThumbPath);
+        tex = new Texture2D(2, 2);
+        tex.LoadImage(fileData);
+    }
+    // 2. UI 머티리얼 mainTexture
+    else if (obj is Material mat && mat.shader != null &&
+             mat.shader.name.ToLowerInvariant().Contains("ui") && mat.mainTexture is Texture2D tex2D)
+    {
+        tex = tex2D;
+    }
+    // 3. 기본 프리뷰
+    else
+    {
+        var preview = AssetPreview.GetAssetPreview(obj) ?? AssetPreview.GetMiniThumbnail(obj);
+        tex = preview as Texture2D;
+    }
+
+    var previewRect = GUILayoutUtility.GetRect(64, 64, GUILayout.Width(64), GUILayout.Height(64));
+    if (tex != null)
+    {
+        GUI.DrawTexture(previewRect, tex, ScaleMode.ScaleToFit);
+        if (Event.current.type == EventType.MouseDown && previewRect.Contains(Event.current.mousePosition))
+        {
+            DragAndDrop.PrepareStartDrag();
+            DragAndDrop.objectReferences = new Object[] { obj };
+            DragAndDrop.StartDrag("Dragging " + obj.name);
+            Event.current.Use();
+        }
+    }
+
+    if (obj is Material matCheck && matCheck.shader != null && matCheck.shader.name.ToLowerInvariant().Contains("ui"))
+        DrawOutline(previewRect, Color.yellow);
+
+    if (fav.tags.Contains("사용X"))
+    {
+        Handles.BeginGUI();
+        Handles.color = Color.red;
+        float thickness = 2f;
+        Vector3 topLeft = new Vector3(previewRect.xMin, previewRect.yMin);
+        Vector3 bottomRight = new Vector3(previewRect.xMax, previewRect.yMax);
+        Vector3 topRight = new Vector3(previewRect.xMax, previewRect.yMin);
+        Vector3 bottomLeft = new Vector3(previewRect.xMin, previewRect.yMax);
+        Handles.DrawAAPolyLine(thickness, topLeft, bottomRight);
+        Handles.DrawAAPolyLine(thickness, topRight, bottomLeft);
+        Handles.EndGUI();
+    }
+
+    if (fav.guid == highlightGuid && EditorApplication.timeSinceStartup - highlightStartTime < 1.5f)
+    {
+        float t = (float)(EditorApplication.timeSinceStartup - highlightStartTime);
+        float alpha = Mathf.Sin(t * Mathf.PI * 2) * 0.5f + 0.5f;
+        Color glow = Color.Lerp(Color.white, Color.cyan, alpha);
+        DrawOutline(previewRect, glow);
         Repaint();
     }
-}
-            i++;
-        }
 
-        EditorGUILayout.EndHorizontal();
+    GUILayout.Space(8);
+    GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+
+    EditorGUILayout.BeginHorizontal();
+    EditorGUILayout.ObjectField(obj, typeof(Object), false);
+    if (GUILayout.Button("X", GUILayout.Width(20)))
+    {
+        SaveStateToUndo();
+        list.Remove(fav);
+        if (autoSave) SaveData();
+        GUIUtility.ExitGUI();
     }
+    EditorGUILayout.EndHorizontal();
+
+    if (obj is Material shaderMat && shaderMat.shader != null)
+    {
+        string shaderName = shaderMat.shader.name;
+        GUIStyle shaderStyle = new GUIStyle(EditorStyles.label) { fontSize = 10 };
+        shaderStyle.normal.textColor =
+            shaderName.ToLowerInvariant().Contains("flowdistortion") ? new Color(0.88f, 0.52f, 1f) :
+            shaderName.ToLowerInvariant().Contains("additive")       ? Color.yellow :
+            shaderName.ToLowerInvariant().Contains("alpha")          ? Color.cyan :
+                                                                        new Color(0.75f, 0.75f, 0.75f);
+        GUILayout.Label(shaderName, shaderStyle);
+    }
+
+    float width = cardWidth - 50 - 32;
+    float x = 0, y = 0, tagHeight = 18, margin = 4;
+    Rect tagStart = GUILayoutUtility.GetRect(width, 0);
+
+    Rect arrowRect = new Rect(tagStart.x + x, tagStart.y + y, 20, tagHeight);
+    if (EditorGUI.DropdownButton(arrowRect, new GUIContent("▾"), FocusType.Passive, EditorStyles.popup))
+    {
+        var sortedTags = tagDict[selectedGroup].OrderBy(t => t.name).ToList();
+        float totalHeight = Mathf.Min(400, sortedTags.Count * 24 + 10);
+        PopupWindow.Show(arrowRect, new TagPopupPicker(fav, sortedTags, autoSave, totalHeight));
+    }
+    x += 24;
+    foreach (var tagName in fav.tags.OrderBy(n => n))
+    {
+        var tagInfo = tagDict[selectedGroup].FirstOrDefault(t => t.name == tagName);
+        if (tagInfo == null) continue;
+        Vector2 size = GUI.skin.box.CalcSize(new GUIContent(tagName));
+        if (x + size.x > width) { x = 0; y += tagHeight + margin; }
+        Rect rect = new Rect(tagStart.x + x, tagStart.y + y, size.x, tagHeight);
+        x += size.x + margin;
+        Color prevClr = GUI.backgroundColor;
+        GUI.backgroundColor = tagInfo.color.ToColor();
+        GUIStyle style = new GUIStyle(GUI.skin.box)
+        {
+            normal = { textColor = Color.white },
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 10
+        };
+        GUI.Box(rect, tagName, style);
+        GUI.backgroundColor = prevClr;
+    }
+
+    if (fav.tags.Count > 0)
+        GUILayout.Space(y + tagHeight + margin);
+
+    GUILayout.EndVertical();
+
+    EditorGUILayout.EndHorizontal();
+    GUILayout.EndVertical();
+
+    // CA 버튼 (썸네일 캡처)
+    if (selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.Scene)
+    {
+        Rect cardRect = GUILayoutUtility.GetLastRect();
+        float btnW = 26f, btnH = 16f;
+        float btnX = cardRect.xMax - btnW - 4;
+        float btnY = cardRect.yMax - btnH - 4;
+        Rect caBtnRect = new Rect(btnX, btnY, btnW, btnH);
+
+        if (GUI.Button(caBtnRect, "⦿"))
+        {
+            CaptureSceneViewToThumbnail(obj.name, fav.guid);
+            LoadCustomThumbnails();
+            Repaint();
+        }
+    }
+
+    if (idx % columns == columns - 1)
+        EditorGUILayout.EndHorizontal();
+}
+
+// 3) 마지막 행이 열려 있으면 닫아준다
+if (filtered.Count > 0 && filtered.Count % columns != 0)
+    EditorGUILayout.EndHorizontal();
+
 
     EditorGUILayout.EndScrollView();
 }
@@ -639,6 +708,8 @@ private AssetGroupType DetectAssetGroup(Object obj)
             return AssetGroupType.Prefab;
     }
     if (obj is SceneAsset) return AssetGroupType.Scene;
+	if (obj is Shader) return AssetGroupType.Shader;
+
 
     return selectedGroup; // 🔸 기본값: 인식 불가하면 현재 선택된 그룹
 }
