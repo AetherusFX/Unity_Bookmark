@@ -1,0 +1,114 @@
+{
+    "groups": [
+        {
+            "groupType": 0,
+            "assets": []
+        },
+        {
+            "groupType": 1,
+            "assets": []
+        },
+        {
+            "groupType": 2,
+            "assets": []
+        },
+        {
+            "groupType": 3,
+            "assets": []
+        },
+        {
+            "groupType": 4,
+            "assets": []
+        },
+        {
+            "groupType": 5,
+            "assets": []
+        }
+    ],
+    "tagGroups": [
+        {
+            "groupType": 0,
+            "tags": [
+                {
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "groupType": 1,
+            "tags": [
+                {
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "groupType": 2,
+            "tags": [
+                {
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "groupType": 3,
+            "tags": [
+                {
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "groupType": 4,
+            "tags": [
+                {
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+            ]
+        },
+        {
+            "groupType": 5,
+            "tags": [
+			{
+                    "name": "사용X",
+                    "color": {
+                        "r": 1.0,
+                        "g": 0.0,
+                        "b": 0.0,
+                        "a": 1.0
+                    }
+                }
+			]
+        }
+    ]
+}
