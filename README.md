@@ -1,4 +1,4 @@
-Version	|   1.1
+Version	   1.1
 
 ## 목적
 유니티 프로젝트 에셋(Material, Texture, Prefab 등)을 그룹별로 관리하고, 태그 및 검색 기능을 통해 쉽게 찾을 수 있게 돕는 에디터 확장 도구입니다.
