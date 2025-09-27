@@ -11,7 +11,7 @@ MIT License (Modified Version)
 
 ## 사용법 가이드
 - 00_PresetBackup		D 드라이브에 추가합니다.
-- _Bookmark.cs		유니티의 Editor 폴더 내부에 추가합니다. (예: 저는 Editor 내에 @Editor 폴더를 새로 만들어 그 안에 넣었으나, 필수는 아닙니다.)
+- _Bookmark.cs		유니티의 Editor 폴더 내부에 추가합니다. (예: 저는 Editor 내에 @FX 폴더를 새로 만들어 그 안에 넣었으나, 필수는 아닙니다.)
 
 ### [v1.0]
 - 에셋 드래그 앤 드롭으로 즐겨찾기 등록 및 그룹 자동 분류
