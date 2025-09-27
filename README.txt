@@ -31,7 +31,7 @@ v1.0 Key Features
 • Reordering assets within the bookmark list via drag-and-drop. 
 • Undo/Redo functionality and manual/delayed auto-save.
 
-v1.1 Key Improvements	
+v1.1 Key Improvements_250927		
 • UI/Usability: Fixed the issue where buttons scrolled along with the asset list by anchoring the UI layout. Eliminated horizontal scrolling by making the asset card width dynamic to fit the window size. 
 • UI Material Indication: Adjusted the opacity of the yellow border for UI Shader Materials in the preview to 0.7 for better visibility. 
 • Material Info: Added Word Wrap to the shader name label on the Material card for cleaner display of long shader names. 
