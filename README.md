@@ -7,7 +7,7 @@ Version	   1.1
 이 에디터 확장 도구는 저의 개인적인 요구 사항을 바탕으로 제작되었습니다.
 따라서 적극적인 업데이트나 개별적인 지원 요청에 대한 응답이 어려울 수 있습니다. 
 필요한 추가 기능이 있다면, 본 플러그인은 GitHub에서 무료로 다운로드 가능하니 자유롭게 수정하여 사용해 주시기 바랍니다.
-Permitted Use (Non-Commercial)
+MIT License (Modified Version)
 
 ## 사용법 가이드
 - 00_PresetBackup		D 드라이브에 추가합니다.
@@ -36,12 +36,7 @@ An Editor Extension tool for Unity that helps users easily manage and find proje
 ## Support
 I’ve created this Editor Extension tool based on my specific needs.
 Therefore, I may not be able to actively provide updates or respond to individual support requests. If you require additional features, this plugin is available for free download on GitHub, and you are welcome to freely modify and use it for your needs.
-
-Permitted Use (Non-Commercial)
-The script can be used without restriction. You may copy, modify, merge, and distribute the Software, and permit others to do the same.
-However, please note the following conditions:
-- The Software, substantial portions, or any modified version must always remain free of charge and cannot be sold commercially or used for any commercial purpose.
-- The full text of this license and the copyright notice must be included in all copies, substantial portions, or modified versions of the Software.
+MIT License (Modified Version)
 
 ## Usage Guide
 - 00_PresetBackup folder	Add this to the D drive.
