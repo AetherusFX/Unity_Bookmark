@@ -1,6 +1,6 @@
 /*
 @name: _Bookmark
-@version: 1.1
+@version: 1.0
 
 This script is provided "as is" and is free to use, modify, and distribute without restriction.
 
@@ -60,8 +60,6 @@ public class _Bookmark : EditorWindow
 	private string thumbSaveRoot => @"D:\00_PresetBackup\@Unity\@Editor_Json\_BookmarkData_Thumbnail";
 	private Dictionary<string, string> customThumbnailMap = new(); // GUID -> 썸네일 파일 경로 (Prefab/Scene 공통)
 
-private double nextSaveTime = -1;  // 🔹 저장 예약용 변수
-
 
     [MenuItem("Tools/@FX_Tools/_Bookmark")]
     public static void ShowWindow()
@@ -109,47 +107,36 @@ private void CaptureSceneViewToThumbnail(string prefabName, string guid)
         EditorUtility.DisplayDialog("Error", "씬 뷰가 열려 있어야 합니다.", "OK");
         return;
     }
-
-    int width = 256, height = 256;
-    RenderTexture rt = new RenderTexture(width, height, 24);
-    Texture2D screenShot = new Texture2D(width, height, TextureFormat.RGB24, false);
-
-    // ✅ 씬뷰 강제 갱신
-    sceneView.Repaint();
-    sceneView.SendEvent(EditorGUIUtility.CommandEvent("RefreshSceneView"));
-
-    // ✅ SceneView 카메라로 렌더링
-    var cam = sceneView.camera;
-    if (cam == null)
+    var camera = sceneView.camera;
+    if (camera == null)
     {
         EditorUtility.DisplayDialog("Error", "씬 뷰 카메라를 찾을 수 없습니다.", "OK");
         return;
     }
 
-    cam.targetTexture = rt;
-    cam.Render();
-    RenderTexture.active = rt;
+    int width = 256, height = 256;
+    RenderTexture rt = new RenderTexture(width, height, 24);
+    Texture2D screenShot = new Texture2D(width, height, TextureFormat.RGB24, false);
 
+    camera.targetTexture = rt;
+    camera.Render();
+    RenderTexture.active = rt;
     screenShot.ReadPixels(new Rect(0, 0, width, height), 0, 0);
     screenShot.Apply();
 
-    cam.targetTexture = null;
+    camera.targetTexture = null;
     RenderTexture.active = null;
     Object.DestroyImmediate(rt);
 
     byte[] bytes = screenShot.EncodeToPNG();
+    // 썸네일 파일 이름을 GUID로 지정합니다.
     string savePath = Path.Combine(thumbSaveRoot, guid + ".png");
     File.WriteAllBytes(savePath, bytes);
     AssetDatabase.Refresh();
 
     customThumbnailMap[guid] = savePath;
-	// 🔹 새로 캡처된 썸네일은 즉시 캐시에 갱신
-Texture2D newTex = new Texture2D(2, 2);
-newTex.LoadImage(bytes);
-newTex.Apply();
-thumbnailCache[guid] = newTex;
-}
 
+}
 
 private void RefreshThumbnail(string newPrefabName)
 {
@@ -207,51 +194,30 @@ GUILayout.Space(5);
         GUILayout.Label("태그 필터", EditorStyles.boldLabel);
         if (!tagDict.TryGetValue(selectedGroup, out var filterTags)) { GUILayout.Label("(태그 없음)"); return; }
 
+        float width = EditorGUIUtility.currentViewWidth - 40;
+        float x = 0, y = 0, margin = 4;
+        Rect lastRect = GUILayoutUtility.GetLastRect();
+        Rect startRect = new Rect(lastRect.x, lastRect.yMax + margin, width, 0);
         GUILayout.BeginVertical("box");
-        
-        // 현재 뷰의 사용 가능한 너비 계산 (마진 고려)
-        float viewWidth = EditorGUIUtility.currentViewWidth - 40; 
-        float currentLineLength = 0f;
-        float spacing = 5f; // 버튼 사이의 간격
-        
-        // 첫 번째 행 시작
-        EditorGUILayout.BeginHorizontal();
-
         foreach (var tag in filterTags.OrderBy(t => t.name))
         {
             bool isSelected = selectedTags.Contains(tag.name);
-            GUIContent content = new GUIContent(tag.name);
-            Vector2 size = GUI.skin.button.CalcSize(content);
+            Vector2 size = GUI.skin.button.CalcSize(new GUIContent(tag.name));
+            if (x + size.x > width) { x = 0; y += size.y + margin; }
+            Rect rect = new Rect(startRect.x + x, startRect.y + y, size.x, size.y);
+            x += size.x + margin;
 
-            // 줄 바꿈 필요 시: 현재 행을 닫고 새로운 행 시작
-            // currentLineLength != 0 조건을 추가하여 버튼 하나가 viewWidth보다 크더라도 무한 루프에 빠지지 않게 함
-            if (currentLineLength + size.x + spacing > viewWidth && currentLineLength != 0)
-            {
-                EditorGUILayout.EndHorizontal();
-                EditorGUILayout.BeginHorizontal();
-                currentLineLength = 0f;
-            }
-
-            // 버튼 그리기
             Color prev = GUI.backgroundColor;
             GUI.backgroundColor = tag.color.ToColor();
-
-            // GUILayout.Button을 사용하여 Unity의 레이아웃 시스템에 맡김
-            if (GUILayout.Button(content, GUILayout.Width(size.x))) 
-            {
+            if (GUI.Button(rect, tag.name)) {
                 if (isSelected) selectedTags.Remove(tag.name);
                 else selectedTags.Add(tag.name);
             }
             GUI.backgroundColor = prev;
-            
-            // 선택된 태그의 윤곽선 그리기
-            if (isSelected) DrawOutline(GUILayoutUtility.GetLastRect());
-
-            currentLineLength += size.x + spacing;
+            if (isSelected) DrawOutline(rect);
         }
-
-        EditorGUILayout.EndHorizontal(); // 마지막 행 닫기
-        GUILayout.EndVertical(); // 태그 박스 닫기
+        GUILayout.Space(y + 30);
+        GUILayout.EndVertical();
     }
 
     private void DrawSettingsTags()
@@ -340,12 +306,7 @@ private void AddNewTag()
         !tagDict[selectedGroup].Any(t => t.name == newTagName))
     {
         tagDict[selectedGroup].Add(new TagInfo { name = newTagName });
-        if (autoSave)
-{
-    nextSaveTime = EditorApplication.timeSinceStartup + 0.5f;
-    EditorApplication.update -= DelayedSave;
-    EditorApplication.update += DelayedSave;
-}
+        if (autoSave) SaveData();
     }
     newTagName = string.Empty;
     GUI.FocusControl(null); // 포커스 해제
@@ -382,7 +343,7 @@ private void AddNewTag()
         }
     }
 
-    // ⭐ 1. 버튼 그룹을 스크롤 뷰 위에 고정
+    scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
     GUILayout.BeginHorizontal();
     GUILayout.Label($"{selectedGroup} 그룹", EditorStyles.boldLabel);
     GUIStyle iconButtonStyle = new GUIStyle(GUI.skin.button)
@@ -414,11 +375,8 @@ private void AddNewTag()
 
     GUI.backgroundColor = prevColor;
     GUILayout.EndHorizontal();
-    // ⭐ 2. 스크롤 뷰 시작
-    scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
-
-    float totalMargin = 55f;
+    float totalMargin = 40f;
     float cardWidth = (EditorGUIUtility.currentViewWidth - totalMargin) / columns;
 
     // 1) 먼저 필터링된 목록을 만든다 (여기서 continue 사용 금지)
@@ -493,19 +451,14 @@ for (int idx = 0; idx < filtered.Count; idx++)
     string objGuid = fav.guid;
     Texture2D tex = null;
 
-    // 1. Prefab/Scene 커스텀 썸네일 (캐싱 추가)
-if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.Scene) &&
-    customThumbnailMap.TryGetValue(objGuid, out var customThumbPath) && File.Exists(customThumbPath))
-{
-    if (!thumbnailCache.TryGetValue(objGuid, out tex) || tex == null)
+    // 1. Prefab/Scene 커스텀 썸네일
+    if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.Scene) &&
+        customThumbnailMap.TryGetValue(objGuid, out var customThumbPath) && File.Exists(customThumbPath))
     {
         byte[] fileData = File.ReadAllBytes(customThumbPath);
         tex = new Texture2D(2, 2);
         tex.LoadImage(fileData);
-        tex.Apply();
-        thumbnailCache[objGuid] = tex; // ✅ 캐싱
     }
-}
     // 2. UI 머티리얼 mainTexture
     else if (obj is Material mat && mat.shader != null &&
              mat.shader.name.ToLowerInvariant().Contains("ui") && mat.mainTexture is Texture2D tex2D)
@@ -533,7 +486,7 @@ if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.S
     }
 
     if (obj is Material matCheck && matCheck.shader != null && matCheck.shader.name.ToLowerInvariant().Contains("ui"))
-        DrawOutline(previewRect, new Color(1.00f, 1.00f, 0.00f, 0.70f));
+        DrawOutline(previewRect, Color.yellow);
 
     if (fav.tags.Contains("사용X"))
     {
@@ -575,27 +528,18 @@ if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.S
     if (obj is Material shaderMat && shaderMat.shader != null)
     {
         string shaderName = shaderMat.shader.name;
-        GUIStyle shaderStyle = new GUIStyle(EditorStyles.label) 
-        { 
-            fontSize = 10,
-            wordWrap = true // 👈 줄 바꿈 활성화
-        };
-
+        GUIStyle shaderStyle = new GUIStyle(EditorStyles.label) { fontSize = 10 };
         shaderStyle.normal.textColor =
             shaderName.ToLowerInvariant().Contains("flowdistortion") ? new Color(0.88f, 0.52f, 1f) :
             shaderName.ToLowerInvariant().Contains("additive")       ? Color.yellow :
             shaderName.ToLowerInvariant().Contains("alpha")          ? Color.cyan :
                                                                         new Color(0.75f, 0.75f, 0.75f);
-        
-        // GUILayout.Label은 GUILayout.ExpandHeight(true)와 함께 사용하지 않아도 자동으로 필요한 높이를 차지합니다.
         GUILayout.Label(shaderName, shaderStyle);
     }
 
+    float width = cardWidth - 50 - 32;
     float x = 0, y = 0, tagHeight = 18, margin = 4;
-    float tagAreaWidth = cardWidth - 50 - 32; // v1.0의 근사치 너비 (ObjectField 및 X 버튼 공간 제외)
-    Rect tagStart = GUILayoutUtility.GetRect(tagAreaWidth, 0);
-
-    float width = tagAreaWidth; // 👈 v1.0과 동일하게 명시적 너비 사용
+    Rect tagStart = GUILayoutUtility.GetRect(width, 0);
 
     Rect arrowRect = new Rect(tagStart.x + x, tagStart.y + y, 20, tagHeight);
     if (EditorGUI.DropdownButton(arrowRect, new GUIContent("▾"), FocusType.Passive, EditorStyles.popup))
@@ -751,17 +695,6 @@ if (autoSave) SaveData();
         Event.current.Use();
     }
 }
-
-private void DelayedSave()
-{
-    if (nextSaveTime > 0 && EditorApplication.timeSinceStartup >= nextSaveTime)
-    {
-        nextSaveTime = -1;
-        EditorApplication.update -= DelayedSave;
-        SaveData();  // 🔹 실제 저장 실행
-    }
-}
-
 
 private AssetGroupType DetectAssetGroup(Object obj)
 {
