@@ -13,7 +13,7 @@ Version	|   1.1
 - 00_PresetBackup		D 드라이브에 추가합니다.
 - _Bookmark.cs		유니티의 Editor 폴더 내부에 추가합니다. (예: 저는 Editor 내에 @Editor 폴더를 새로 만들어 그 안에 넣었으나, 필수는 아닙니다.)
 
-## [v1.0]
+### [v1.0]
 - 에셋 드래그 앤 드롭으로 즐겨찾기 등록 및 그룹 자동 분류
 - 태그 기반 필터링 및 관리 (태그별 색상 지원) 
 - 에셋 이름 검색 기능 
@@ -21,7 +21,7 @@ Version	|   1.1
 - 북마크 리스트 내에서 에셋 드래그하여 순서 변경 
 - Undo/Redo 기능 및 수동/자동 저장 기능
 
-## [v1.1]_250927	
+### [v1.1]_250927	
 - UI/사용성 개선: UI 레이아웃을 고정하여 스크롤 시 버튼이 함께 움직이는 현상을 수정하고, 에셋 목록 카드의 너비를 창 크기에 맞춰 가로 스크롤을 제거했습니다. 
 - UI 머티리얼 표시: UI 쉐이더를 사용하는 머티리얼 프리뷰에 노란색 테두리의 불투명도를 0.7로 조정합니다. 
 - 머티리얼 정보: 머티리얼 카드의 쉐이더 이름을 줄 바꿈(Word Wrap) 처리합니다. 
@@ -47,7 +47,7 @@ However, please note the following conditions:
 - 00_PresetBackup folder	Add this to the D drive.
 - _Bookmark.cs file		Add this inside Unity's Editor folder. (e.g., I created a new folder named @Editor inside the Editor folder and placed it there, but this is not mandatory.)
 
-## [v1.0]
+### [v1.0]
 - Drag-and-drop asset registration with automatic group classification. 
 - Tag-based filtering and management (with color support per tag). 
 - Asset name search functionality. 
@@ -55,7 +55,7 @@ However, please note the following conditions:
 - Reordering assets within the bookmark list via drag-and-drop. 
 - Undo/Redo functionality and manual/delayed auto-save.
 
-## [v1.1]_250927		
+### [v1.1]_250927		
 - UI/Usability: Fixed the issue where buttons scrolled along with the asset list by anchoring the UI layout. Eliminated horizontal scrolling by making the asset card width dynamic to fit the window size. 
 - UI Material Indication: Adjusted the opacity of the yellow border for UI Shader Materials in the preview to 0.7 for better visibility. 
 - Material Info: Added Word Wrap to the shader name label on the Material card for cleaner display of long shader names. 
