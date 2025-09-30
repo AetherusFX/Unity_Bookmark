@@ -40,7 +40,7 @@ MIT License (Modified Version)
 
 ## Usage Guide
 - 00_PresetBackup folder	Add this to the D drive.
-- _Bookmark.cs file		Add this inside Unity's Editor folder. (e.g., I created a new folder named @Editor inside the Editor folder and placed it there, but this is not mandatory.)
+- _Bookmark.cs file		Add this inside Unity's Editor folder. (e.g., I created a new folder named @FX inside the Editor folder and placed it there, but this is not mandatory.)
 
 ### [v1.0]
 - Drag-and-drop asset registration with automatic group classification. 
