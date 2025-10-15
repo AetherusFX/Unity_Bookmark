@@ -1,8 +1,8 @@
 /*
 @name: _Bookmark
-@version: 1.1
+@version: 1.2
 
-Copyright (c) 2025 AetherusFX
+Copyright (c) 2025 SominicWorks
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -111,6 +111,7 @@ private void LoadCustomThumbnails()
 
 private void CaptureSceneViewToThumbnail(string prefabName, string guid)
 {
+    // --- SceneView 카메라 시점 + UI 포함 캡처 ---
     var sceneView = SceneView.lastActiveSceneView;
     if (sceneView == null)
     {
@@ -122,41 +123,98 @@ private void CaptureSceneViewToThumbnail(string prefabName, string guid)
     RenderTexture rt = new RenderTexture(width, height, 24);
     Texture2D screenShot = new Texture2D(width, height, TextureFormat.RGB24, false);
 
-    // ✅ 씬뷰 강제 갱신
-    sceneView.Repaint();
-    sceneView.SendEvent(EditorGUIUtility.CommandEvent("RefreshSceneView"));
-
-    // ✅ SceneView 카메라로 렌더링
-    var cam = sceneView.camera;
-    if (cam == null)
+    // ✅ SceneView 카메라 확보
+    Camera sceneCam = sceneView.camera;
+    if (sceneCam == null)
     {
-        EditorUtility.DisplayDialog("Error", "씬 뷰 카메라를 찾을 수 없습니다.", "OK");
+        EditorUtility.DisplayDialog("Error", "SceneView 카메라를 찾을 수 없습니다.", "OK");
         return;
     }
 
-    cam.targetTexture = rt;
-    cam.Render();
-    RenderTexture.active = rt;
+    // ✅ 씬뷰 갱신
+    sceneView.Repaint();
+    sceneView.SendEvent(EditorGUIUtility.CommandEvent("RefreshSceneView"));
 
+    // 🔹 씬 내 카메라 수집 (UI 포함)
+    Camera[] allCams = GameObject.FindObjectsOfType<Camera>(true);
+    var uiCam = allCams.FirstOrDefault(c => c != sceneCam && c.enabled && c.GetComponent<Canvas>() != null || c.name.Contains("UI"));
+
+    // 🔸 UI 카메라 시점 임시 백업
+    Vector3 uiCamPos = Vector3.zero;
+    Quaternion uiCamRot = Quaternion.identity;
+    float uiCamFov = 60f;
+    bool uiCamOrtho = false;
+    float uiCamOrthoSize = 5f;
+
+    if (uiCam != null)
+    {
+        uiCamPos = uiCam.transform.position;
+        uiCamRot = uiCam.transform.rotation;
+        uiCamFov = uiCam.fieldOfView;
+        uiCamOrtho = uiCam.orthographic;
+        uiCamOrthoSize = uiCam.orthographicSize;
+
+        // 🔹 SceneView 시점 복제
+        uiCam.transform.position = sceneCam.transform.position;
+        uiCam.transform.rotation = sceneCam.transform.rotation;
+        uiCam.fieldOfView = sceneCam.fieldOfView;
+        uiCam.orthographic = sceneCam.orthographic;
+        uiCam.orthographicSize = sceneCam.orthographicSize;
+    }
+
+    // 🔹 렌더 시작
+    RenderTexture.active = rt;
+    GL.Clear(true, true, Color.black);
+
+    // SceneView 카메라 먼저 렌더
+    sceneCam.targetTexture = rt;
+    sceneCam.Render();
+    sceneCam.targetTexture = null;
+
+    // UI 카메라 추가 렌더 (시점 복제된 상태)
+    if (uiCam != null)
+    {
+        RenderTexture prev = uiCam.targetTexture;
+        uiCam.targetTexture = rt;
+        uiCam.Render();
+        uiCam.targetTexture = prev;
+    }
+
+    // 🔸 픽셀 읽기
     screenShot.ReadPixels(new Rect(0, 0, width, height), 0, 0);
     screenShot.Apply();
 
-    cam.targetTexture = null;
     RenderTexture.active = null;
-    Object.DestroyImmediate(rt);
+    rt.Release();
 
+    // 🔹 UI 카메라 원래 값 복원
+    if (uiCam != null)
+    {
+        uiCam.transform.position = uiCamPos;
+        uiCam.transform.rotation = uiCamRot;
+        uiCam.fieldOfView = uiCamFov;
+        uiCam.orthographic = uiCamOrtho;
+        uiCam.orthographicSize = uiCamOrthoSize;
+    }
+
+    // 🔹 PNG 저장
     byte[] bytes = screenShot.EncodeToPNG();
     string savePath = Path.Combine(thumbSaveRoot, guid + ".png");
     File.WriteAllBytes(savePath, bytes);
     AssetDatabase.Refresh();
 
     customThumbnailMap[guid] = savePath;
-	// 🔹 새로 캡처된 썸네일은 즉시 캐시에 갱신
-Texture2D newTex = new Texture2D(2, 2);
-newTex.LoadImage(bytes);
-newTex.Apply();
-thumbnailCache[guid] = newTex;
+
+    // 🔹 새 썸네일 캐시 반영
+    Texture2D newTex = new Texture2D(2, 2);
+    newTex.LoadImage(bytes);
+    newTex.Apply();
+    thumbnailCache[guid] = newTex;
+
+    Debug.Log($"✅ 썸네일 캡처 완료 (SceneView 시점 + UI 포함): {savePath}");
 }
+
+
 
 
 private void RefreshThumbnail(string newPrefabName)

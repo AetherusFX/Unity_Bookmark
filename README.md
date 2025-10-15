@@ -1,4 +1,4 @@
-Version	   1.1
+Version	   1.2
 
 ## 목적
 유니티 프로젝트 에셋(Material, Texture, Prefab 등)을 그룹별로 관리하고, 태그 및 검색 기능을 통해 쉽게 찾을 수 있게 돕는 에디터 확장 도구입니다.
@@ -28,7 +28,8 @@ MIT License (Modified Version)
 - 성능 최적화: 저장된 에셋이 많아질 때 발생할 수 있는 느려짐 문제를 개선했습니다.
 - 썸네일 캡처: 씬 뷰에 **Canvas(UIRoot)**와 같은 요소가 있을 경우 캡처 영역이 비어 보이거나 잘리는 문제를 수정하여 정확한 씬 뷰 썸네일이 캡처되도록 보완했습니다.
 
-
+### [v1.2]_251015	
+- 썸네일 캡처: 씬 뷰에 **Canvas(UIRoot)**와 같은 요소가 있을 경우 캡처 영역이 비어 보이거나 잘리는 문제를 수정했습니다. 하지만 아직 Orthographic Canera일 경우 UI오브젝트가 UICanvas사이즈에 맞춰져서 찍히는 문제가 존재해서 추가 수정 예정입니다. 
 
 ## Purpose	
 An Editor Extension tool for Unity that helps users easily manage and find project assets (Material, Texture, Prefab, etc.) by grouping them and providing tag and search functionalities.
@@ -56,3 +57,6 @@ MIT License (Modified Version)
 - Material Info: Added Word Wrap to the shader name label on the Material card for cleaner display of long shader names. 
 - Performance Optimization: Improved performance to mitigate slowdowns that could occur with a large number of saved assets. 
 - Thumbnail Capture: Fixed an issue where the captured area appeared blank or cut off when elements like a Canvas (UIRoot) were present in the Scene View, ensuring accurate Scene View thumbnails are captured.
+
+### [v1.1]_250927
+- Thumbnail Capture: Fixed an issue where the capture area appeared empty or was clipped when elements like Canvas (UIRoot) were present in the Scene view. However, a problem still exists where UI objects are captured relative to the UICanvas size when using an Orthographic Camera, and this requires further revision.
