@@ -1,4 +1,4 @@
-Version	   1.1
+Version	   1.2
 
 ## 목적
 유니티 프로젝트 에셋(Material, Texture, Prefab 등)을 그룹별로 관리하고, 태그 및 검색 기능을 통해 쉽게 찾을 수 있게 돕는 에디터 확장 도구입니다.
@@ -27,6 +27,11 @@ MIT License (Modified Version)
 - 머티리얼 정보: 머티리얼 카드의 쉐이더 이름을 줄 바꿈(Word Wrap) 처리합니다. 
 - 성능 최적화: 저장된 에셋이 많아질 때 발생할 수 있는 느려짐 문제를 개선했습니다.
 
+### [v1.2]_251102
+- 썸네일 캡처 분리 및 개선: 프리팹은 기존 SceneView 기반 방식 그대로 유지하고, 씬은 UI 카메라를 포함한 새로운 캡처 방식을 적용했습니다.→ 씬 캡처 시 UI 오버레이(Canvas 포함)가 정상적으로 렌더링됩니다.
+
+- 버튼 : “⦿” 캡처 버튼이 선택된 항목(프리팹/씬)에 따라 자동으로 올바른 캡처 방식을 실행합니다.
+
 
 ## Purpose	
 An Editor Extension tool for Unity that helps users easily manage and find project assets (Material, Texture, Prefab, etc.) by grouping them and providing tag and search functionalities.
@@ -53,3 +58,8 @@ MIT License (Modified Version)
 - UI Material Indication: Adjusted the opacity of the yellow border for UI Shader Materials in the preview to 0.7 for better visibility. 
 - Material Info: Added Word Wrap to the shader name label on the Material card for cleaner display of long shader names. 
 - Performance Optimization: Improved performance to mitigate slowdowns that could occur with a large number of saved assets. 
+
+### [v1.2]_251102
+- Thumbnail Capture Separation & Improvement: Prefab captures now use the original SceneView-based method, while Scene captures use the new UI-camera-inclusive approach. → UI overlays (including Canvas elements) are now properly rendered in scene captures.
+
+- Button Behavior: The “⦿” capture button automatically selects the appropriate capture method depending on whether the item is a Prefab or a Scene.

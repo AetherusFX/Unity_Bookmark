@@ -1,6 +1,6 @@
 /*
 @name: _Bookmark
-@version: 1.1
+@version: 1.2
 
 Copyright (c) 2025 AetherusFX
 
@@ -26,6 +26,7 @@ SOFTWARE.
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEditor.SceneManagement;
 using System.Linq;
 using System.IO;
 
@@ -109,7 +110,7 @@ private void LoadCustomThumbnails()
     }
 }
 
-private void CaptureSceneViewToThumbnail(string prefabName, string guid)
+private void CapturePrefabToThumbnail(string prefabName, string guid)
 {
     var sceneView = SceneView.lastActiveSceneView;
     if (sceneView == null)
@@ -151,12 +152,109 @@ private void CaptureSceneViewToThumbnail(string prefabName, string guid)
     AssetDatabase.Refresh();
 
     customThumbnailMap[guid] = savePath;
-	// 🔹 새로 캡처된 썸네일은 즉시 캐시에 갱신
-Texture2D newTex = new Texture2D(2, 2);
-newTex.LoadImage(bytes);
-newTex.Apply();
-thumbnailCache[guid] = newTex;
+
+    // 🔹 캐시 갱신
+    Texture2D newTex = new Texture2D(2, 2);
+    newTex.LoadImage(bytes);
+    newTex.Apply();
+    thumbnailCache[guid] = newTex;
 }
+
+
+// ✅ 씬 전용: v1.2 방식(씬뷰 + UI 카메라 합성) 적용
+private void CaptureSceneWithUICamToThumbnail(string sceneName, string guid)
+{
+    int width = 256, height = 256;
+    RenderTexture rt = new RenderTexture(width, height, 24);
+    Texture2D screenShot = new Texture2D(width, height, TextureFormat.RGB24, false);
+
+    // 🔹 PrefabStage(프리팹 모드) 우선 탐색
+    var prefabStage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+    Camera captureCam = null;
+
+    if (prefabStage != null)
+    {
+        // Prefab Stage 내부의 카메라 찾기
+        captureCam = prefabStage.scene.GetRootGameObjects()
+            .SelectMany(go => go.GetComponentsInChildren<Camera>(true))
+            .FirstOrDefault();
+
+        // Prefab Stage 카메라가 없으면 임시 카메라 생성
+        if (captureCam == null)
+        {
+            var tempCamGO = new GameObject("TempPrefabCaptureCam");
+            captureCam = tempCamGO.AddComponent<Camera>();
+            captureCam.backgroundColor = Color.gray;
+            captureCam.clearFlags = CameraClearFlags.Color;
+            captureCam.orthographic = true;
+            captureCam.orthographicSize = 1.5f;
+            captureCam.transform.position = new Vector3(0, 0, -10);
+        }
+
+        captureCam.targetTexture = rt;
+        captureCam.Render();
+        captureCam.targetTexture = null;
+    }
+    else
+    {
+        // 🔸 PrefabStage가 아닐 경우: SceneView + UI 카메라 포함 방식
+        var sceneView = SceneView.lastActiveSceneView;
+        if (sceneView == null || sceneView.camera == null)
+        {
+            EditorUtility.DisplayDialog("Error", "씬 뷰가 열려 있어야 합니다.", "OK");
+            return;
+        }
+
+        Camera sceneCam = sceneView.camera;
+        sceneView.Repaint();
+        sceneView.SendEvent(EditorGUIUtility.CommandEvent("RefreshSceneView"));
+
+        // 활성/비활성 포함 모든 카메라 검색 후, UI 담당 카메라 한 개 정도 선택(이름 또는 Canvas 부착 기준)
+        Camera[] allCams = GameObject.FindObjectsOfType<Camera>(true);
+        var uiCam = allCams.FirstOrDefault(c => c != sceneCam && c.enabled && (c.GetComponent<Canvas>() != null || c.name.Contains("UI")));
+
+        // RT 초기화
+        RenderTexture.active = rt;
+        GL.Clear(true, true, Color.black);
+
+        // 씬 카메라 렌더
+        sceneCam.targetTexture = rt;
+        sceneCam.Render();
+        sceneCam.targetTexture = null;
+
+        // UI 카메라 오버레이
+        if (uiCam != null)
+        {
+            var prev = uiCam.targetTexture;
+            uiCam.targetTexture = rt;
+            uiCam.Render();
+            uiCam.targetTexture = prev;
+        }
+    }
+
+    // 🔸 픽셀 추출
+    RenderTexture.active = rt;
+    screenShot.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+    screenShot.Apply();
+    RenderTexture.active = null;
+    rt.Release();
+
+    // 🔸 PNG 저장
+    byte[] bytes = screenShot.EncodeToPNG();
+    string savePath = Path.Combine(thumbSaveRoot, guid + ".png");
+    File.WriteAllBytes(savePath, bytes);
+    AssetDatabase.Refresh();
+
+    // 🔸 캐시 갱신
+    customThumbnailMap[guid] = savePath;
+    Texture2D newTex = new Texture2D(2, 2);
+    newTex.LoadImage(bytes);
+    newTex.Apply();
+    thumbnailCache[guid] = newTex;
+
+    Debug.Log($"✅ 씬 썸네일 캡처 완료: {sceneName} ({(prefabStage != null ? "PrefabStage" : "SceneView+UI")}) → {savePath}");
+}
+
 
 
 private void RefreshThumbnail(string newPrefabName)
@@ -643,20 +741,25 @@ if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.S
 
     // CA 버튼 (썸네일 캡처)
     if (selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.Scene)
-    {
-        Rect cardRect = GUILayoutUtility.GetLastRect();
-        float btnW = 26f, btnH = 16f;
-        float btnX = cardRect.xMax - btnW - 4;
-        float btnY = cardRect.yMax - btnH - 4;
-        Rect caBtnRect = new Rect(btnX, btnY, btnW, btnH);
+{
+    Rect cardRect = GUILayoutUtility.GetLastRect();
+    float btnW = 26f, btnH = 16f;
+    float btnX = cardRect.xMax - btnW - 4;
+    float btnY = cardRect.yMax - btnH - 4;
+    Rect caBtnRect = new Rect(btnX, btnY, btnW, btnH);
 
-        if (GUI.Button(caBtnRect, "⦿"))
-        {
-            CaptureSceneViewToThumbnail(obj.name, fav.guid);
-            LoadCustomThumbnails();
-            Repaint();
-        }
+    if (GUI.Button(caBtnRect, "⦿"))
+    {
+        // ✅ 프리팹은 v1.1 방식 유지, 씬은 v1.2 방식(UI 오버레이 포함)
+        if (selectedGroup == AssetGroupType.Prefab)
+            CapturePrefabToThumbnail(obj.name, fav.guid);
+        else // Scene
+            CaptureSceneWithUICamToThumbnail(obj.name, fav.guid);
+
+        LoadCustomThumbnails();
+        Repaint();
     }
+}
 
     if (idx % columns == columns - 1)
         EditorGUILayout.EndHorizontal();
