@@ -296,7 +296,7 @@ private void RefreshThumbnail(string newPrefabName)
     {
         byte[] fileData = File.ReadAllBytes(thumbnailPath);
         Texture2D tex = new Texture2D(2, 2);
-        tex.LoadImage(fileData); 
+        tex.LoadImage(fileData);
         tex.Apply();
 
         if (thumbnailCache.ContainsKey(newPrefabName))
@@ -641,33 +641,12 @@ if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.S
     {
         GUI.DrawTexture(previewRect, tex, ScaleMode.ScaleToFit);
         if (Event.current.type == EventType.MouseDown && previewRect.Contains(Event.current.mousePosition))
-{
-    DragAndDrop.PrepareStartDrag();
-
-    string assetPath = AssetDatabase.GUIDToAssetPath(fav.guid);
-    Object realAsset = null;
-
-    if (assetPath.EndsWith(".fbx") || assetPath.EndsWith(".obj"))
-    {
-        var meshes = AssetDatabase.LoadAllAssetsAtPath(assetPath)
-                                  .OfType<Mesh>()
-                                  .ToArray();
-
-        if (meshes.Length > 0)
-            realAsset = meshes[0]; 
-    }
-
-    if (realAsset == null && obj is Mesh meshObj)
-        realAsset = meshObj;
-
-    if (realAsset == null)
-        realAsset = obj;
-
-    DragAndDrop.objectReferences = new Object[] { realAsset };
-    DragAndDrop.StartDrag("Dragging " + realAsset.name);
-    Event.current.Use();
-}
-
+        {
+            DragAndDrop.PrepareStartDrag();
+            DragAndDrop.objectReferences = new Object[] { obj };
+            DragAndDrop.StartDrag("Dragging " + obj.name);
+            Event.current.Use();
+        }
     }
 
     if (obj is Material matCheck && matCheck.shader != null && matCheck.shader.name.ToLowerInvariant().Contains("ui"))
@@ -907,38 +886,21 @@ private void DelayedSave()
 
 private AssetGroupType DetectAssetGroup(Object obj)
 {
-    string path = AssetDatabase.GetAssetPath(obj).ToLowerInvariant();
-    string ext = Path.GetExtension(path);
-
-    if (ext == ".fbx" || ext == ".obj" || ext == ".blend" || ext == ".dae")
-        return AssetGroupType.Mesh;
-
-    if (obj is Mesh) 
-        return AssetGroupType.Mesh;
-
     if (obj is Material) return AssetGroupType.Material;
     if (obj is Texture || obj is Texture2D || obj is Sprite) return AssetGroupType.Texture;
-
+    if (obj is Mesh) return AssetGroupType.Mesh;
     if (obj is GameObject)
     {
-        string gPath = AssetDatabase.GetAssetPath(obj);
-
-        if (gPath.ToLowerInvariant().EndsWith(".fbx") ||
-            gPath.ToLowerInvariant().EndsWith(".obj") ||
-            gPath.ToLowerInvariant().EndsWith(".blend") ||
-            gPath.ToLowerInvariant().EndsWith(".dae"))
-            return AssetGroupType.Mesh;
-
+        string path = AssetDatabase.GetAssetPath(obj);
         if (PrefabUtility.GetPrefabAssetType(obj) != PrefabAssetType.NotAPrefab)
             return AssetGroupType.Prefab;
     }
-
     if (obj is SceneAsset) return AssetGroupType.Scene;
-    if (obj is Shader) return AssetGroupType.Shader;
+	if (obj is Shader) return AssetGroupType.Shader;
+
 
     return selectedGroup; 
 }
-
 
     private class TagPicker : PopupWindowContent
     {
