@@ -94,6 +94,7 @@ private double nextSaveTime = -1;
 }
 
 private bool prefabCaptureUseScreenshot = false;
+private bool sceneCaptureUseScreenshot = false;
 
 private void LoadCustomThumbnails()
 {
@@ -507,8 +508,13 @@ GUILayout.Label($"{selectedGroup} 그룹", GUILayout.Width(80));
 
 if (selectedGroup == AssetGroupType.Prefab)
 {
-    GUILayout.Space(4);  
+    GUILayout.Space(4);
     prefabCaptureUseScreenshot = GUILayout.Toggle(prefabCaptureUseScreenshot, "Win + Shift + S", GUILayout.Width(130));
+}
+else if (selectedGroup == AssetGroupType.Scene)   // ← 추가
+{
+    GUILayout.Space(4);
+    sceneCaptureUseScreenshot = GUILayout.Toggle(sceneCaptureUseScreenshot, "Win + Shift + S", GUILayout.Width(130));
 }
 
 GUILayout.FlexibleSpace(); 
@@ -760,16 +766,19 @@ if ((selectedGroup == AssetGroupType.Prefab || selectedGroup == AssetGroupType.S
     if (GUI.Button(caBtnRect, "⦿"))
 {
     if (selectedGroup == AssetGroupType.Prefab)
-    {
-        if (prefabCaptureUseScreenshot)
-            CapturePrefabFromLatestScreenshot(fav.guid);
-        else
-            CapturePrefabToThumbnail(obj.name, fav.guid); 
-    }
+{
+    if (prefabCaptureUseScreenshot)
+        CapturePrefabFromLatestScreenshot(fav.guid);
     else
-    {
-        CaptureSceneWithUICamToThumbnail(obj.name, fav.guid);
-    }
+        CapturePrefabToThumbnail(obj.name, fav.guid);
+}
+else if (selectedGroup == AssetGroupType.Scene)   // ← Scene용 분기 추가
+{
+    if (sceneCaptureUseScreenshot)
+        CapturePrefabFromLatestScreenshot(fav.guid);   // 씬도 최신 스샷을 썸네일로 사용
+    else
+        CaptureSceneWithUICamToThumbnail(obj.name, fav.guid); 
+}
 
     LoadCustomThumbnails();
     Repaint();
