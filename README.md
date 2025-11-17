@@ -32,4 +32,4 @@ MIT License (Modified Version)
 - Button Behavior: The “⦿” capture button automatically selects the appropriate capture method depending on whether the item is a Prefab or a Scene.
 
 ### [v1.3]_251117
-- Added automatic screenshot-based thumbnail generation for Prefabs and introduced dual Prefab capture modes.
+- Added automatic screenshot-based thumbnail generation and dual capture modes for both Prefabs and Scenes.
