@@ -1,4 +1,4 @@
-Version	   1.3
+Version	   1.4
 
 ## Purpose	
 An Editor Extension tool for Unity that helps users easily manage and find project assets (Material, Texture, Prefab, etc.) by grouping them and providing tag and search functionalities.
