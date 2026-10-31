@@ -33,3 +33,8 @@ MIT License (Modified Version)
 
 ### [v1.3]_251117
 - Added automatic screenshot-based thumbnail generation and dual capture modes for both Prefabs and Scenes.
+
+### [v1.4]_261031
+- Added JSON cleanup with backups and automatic shader filters.
+- Added automatic material tagging and batch tagging for existing bookmarks.
+- Improved save reliability, large-list performance, thumbnail stability, and UI spacing.
