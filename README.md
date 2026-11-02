@@ -38,3 +38,6 @@ MIT License (Modified Version)
 - Added JSON cleanup with backups and automatic shader filters.
 - Added automatic material tagging and batch tagging for existing bookmarks.
 - Improved save reliability, large-list performance, thumbnail stability, and UI spacing.
+
+### [v1.4.1]_261102
+- Added configurable UI/Mobile/ETC categories and merged duplicate shader names into category-specific filters.

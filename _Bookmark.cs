@@ -1,6 +1,6 @@
 /*
 @name: _Bookmark
-@version: 1.4
+@version: 1.4.1
 
 Copyright (c) 2025 AetherusFX
 
@@ -37,6 +37,34 @@ using System.Text;
 public class _Bookmark : EditorWindow
 {
     public enum AssetGroupType { Material, Texture, Mesh, Prefab, Scene, Shader }
+
+    // ===== 셰이더 1차 분류 설정 (JSON에 저장하지 않습니다) =====
+    private static readonly ShaderCategoryRule[] ShaderCategories =
+    {
+        new ShaderCategoryRule("UI", pathSegments: new[] { "UI" }),
+        new ShaderCategoryRule("Mobile", pathSegments: new[] { "Mobile" },
+        prefixes: new[] { "Legacy Shaders/Particles/" }),
+        new ShaderCategoryRule("ETC", catchAll: true),
+        // 추가 예시: ETC 앞에 아래 규칙을 넣으면 4번째 분류로 분리됩니다.
+        // new ShaderCategoryRule("Custom", pathSegments: new[] { "Custom" }),
+    };
+
+    private sealed class ShaderCategoryRule
+    {
+        public readonly string Name;
+        public readonly string[] PathSegments;
+        public readonly string[] Prefixes;
+        public readonly bool CatchAll;
+
+        public ShaderCategoryRule(string name, string[] pathSegments = null, string[] prefixes = null, bool catchAll = false)
+        {
+            Name = name;
+            PathSegments = pathSegments ?? new string[0];
+            Prefixes = prefixes ?? new string[0];
+            CatchAll = catchAll;
+        }
+    }
+    // ===== 분류 설정 끝 =====
 
     private readonly string[] _mainHeaders = new[] { "Project Finder", "Settings" };
 
@@ -877,7 +905,8 @@ public class _Bookmark : EditorWindow
         public Object asset;
         public string name;
         public string shader;
-        public string root;
+        public string root; // Cached configured category, not the first path segment.
+        public string shaderLeaf;
         public int dirtyCount;
         public Hash128 dependencyHash;
     }
@@ -891,6 +920,8 @@ public class _Bookmark : EditorWindow
     private readonly Dictionary<string, double> previewRequested = new Dictionary<string, double>();
     private readonly Dictionary<string, Texture2D> miniThumbnails = new Dictionary<string, Texture2D>();
     private readonly HashSet<string> missingCustomThumbnails = new HashSet<string>();
+    private readonly Dictionary<string, string> shaderCategoryCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> shaderNameTooltips = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private List<string> shaderRoots = new List<string>();
     private List<string> shaderNames = new List<string>();
     private string selectedShaderRoot = "";
@@ -957,6 +988,7 @@ public class _Bookmark : EditorWindow
     private void RestartIndex()
     {
         assetInfo.Clear(); indexQueue.Clear();
+        shaderCategoryCache.Clear();
         foreach (string guid in groupDict.Values.SelectMany(g => g.assets).Select(a => a.guid).Distinct())
         indexQueue.Enqueue(guid);
         ClearPreviews();
@@ -969,12 +1001,12 @@ public class _Bookmark : EditorWindow
     {
         string path = AssetDatabase.GUIDToAssetPath(guid);
         Object obj = string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<Object>(path);
-        var info = new AssetInfo { asset = obj, name = obj == null ? "" : obj.name, shader = "", root = "" };
+        var info = new AssetInfo { asset = obj, name = obj == null ? "" : obj.name, shader = "", root = "", shaderLeaf = "" };
         if (obj is Material mat && mat.shader != null)
         {
             info.shader = mat.shader.name;
-            int slash = info.shader.IndexOf('/');
-            info.root = slash >= 0 ? info.shader.Substring(0, slash) : info.shader;
+            info.root = ClassifyShader(info.shader);
+            info.shaderLeaf = info.shader.Substring(info.shader.LastIndexOf('/') + 1);
         }
         info.dirtyCount = obj == null ? 0 : EditorUtility.GetDirtyCount(obj);
         info.dependencyHash = string.IsNullOrEmpty(path) ? default(Hash128) : AssetDatabase.GetAssetDependencyHash(path);
@@ -1033,7 +1065,7 @@ public class _Bookmark : EditorWindow
             if (selectedGroup == AssetGroupType.Material)
             {
                 if (selectedShaderRoot.Length > 0 && info.root != selectedShaderRoot) continue;
-                if (selectedShader.Length > 0 && info.shader != selectedShader) continue;
+                if (selectedShader.Length > 0 && !string.Equals(info.shaderLeaf, selectedShader, StringComparison.OrdinalIgnoreCase)) continue;
             }
             filteredAssets.Add(fav);
         }
@@ -1083,22 +1115,64 @@ public class _Bookmark : EditorWindow
         return hasCaptureButton ? Mathf.Max(93, height + 20) : height;
     }
 
+    private string ClassifyShader(string shaderName)
+    {
+        if (string.IsNullOrEmpty(shaderName)) return "";
+        if (shaderCategoryCache.TryGetValue(shaderName, out string cached)) return cached;
+        string[] segments = shaderName.Split('/');
+        string fallback = "";
+        foreach (var rule in ShaderCategories)
+        {
+            if (rule == null || string.IsNullOrWhiteSpace(rule.Name)) continue;
+            if (rule.CatchAll)
+            {
+                if (fallback.Length == 0) fallback = rule.Name;
+                continue;
+            }
+            bool matchesSegment = rule.PathSegments.Any(segment => !string.IsNullOrWhiteSpace(segment) &&
+            segments.Any(part => string.Equals(part, segment, StringComparison.OrdinalIgnoreCase)));
+            bool matchesPrefix = rule.Prefixes.Any(prefix => !string.IsNullOrWhiteSpace(prefix) &&
+            shaderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (matchesSegment || matchesPrefix)
+            {
+                shaderCategoryCache[shaderName] = rule.Name;
+                return rule.Name;
+            }
+        }
+        shaderCategoryCache[shaderName] = fallback;
+        return fallback;
+    }
+
     private void RebuildShaderOptions()
     {
         if (!shaderOptionsDirty) return;
         shaderOptionsDirty = false;
-        var infos = groupDict[AssetGroupType.Material].assets
-        .Where(a => assetInfo.ContainsKey(a.guid)).Select(a => assetInfo[a.guid]).Where(i => i.asset != null && i.shader.Length > 0).ToList();
-        shaderRoots = infos.Select(i => i.root).Distinct().OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        shaderNames = infos.Where(i => selectedShaderRoot.Length == 0 || i.root == selectedShaderRoot)
-        .Select(i => i.shader).Distinct().OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        // While indexing, preserve a selection whose asset has not been reached yet.
-        if (indexQueue.Count == 0)
+        // Keep configured categories visible and in their configured order, including empty categories.
+        shaderRoots = ShaderCategories.Where(r => r != null && !string.IsNullOrWhiteSpace(r.Name))
+        .Select(r => r.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (selectedShaderRoot.Length > 0 && !shaderRoots.Contains(selectedShaderRoot))
         {
-            if (selectedShaderRoot.Length > 0 && !shaderRoots.Contains(selectedShaderRoot))
-            { selectedShaderRoot = ""; shaderOptionsDirty = true; filteredDirty = true; }
-            if (selectedShader.Length > 0 && !shaderNames.Contains(selectedShader))
-            { selectedShader = ""; filteredDirty = true; }
+            selectedShaderRoot = "";
+            selectedShader = "";
+            filteredDirty = true;
+        }
+        var infos = groupDict[AssetGroupType.Material].assets
+        .Where(a => assetInfo.ContainsKey(a.guid)).Select(a => assetInfo[a.guid])
+        .Where(i => i.asset != null && i.shader.Length > 0 &&
+        (selectedShaderRoot.Length == 0 || i.root == selectedShaderRoot)).ToList();
+        // One button per final shader name. Full paths are retained in the tooltip and asset metadata.
+        var leafGroups = infos.GroupBy(i => i.shaderLeaf, StringComparer.OrdinalIgnoreCase)
+        .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase).ToList();
+        shaderNames = leafGroups.Select(g => g.Key).ToList();
+        shaderNameTooltips.Clear();
+        foreach (var group in leafGroups)
+        shaderNameTooltips[group.Key] = string.Join("\n", group.Select(i => i.shader)
+        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        // During incremental indexing, keep a selected leaf until its assets have been reached.
+        if (indexQueue.Count == 0 && selectedShader.Length > 0 && !shaderNames.Contains(selectedShader, StringComparer.OrdinalIgnoreCase))
+        {
+            selectedShader = "";
+            filteredDirty = true;
         }
     }
 
@@ -1112,7 +1186,7 @@ public class _Bookmark : EditorWindow
         float filterHeight = Mathf.Clamp(MeasureShaderButtons(shaderRoots, true) + MeasureShaderButtons(shaderNames, false) + 8f, 100f, 200f);
         shaderFilterScroll = EditorGUILayout.BeginScrollView(shaderFilterScroll, false, false,
         GUILayout.Height(filterHeight), GUILayout.ExpandHeight(false));
-        DrawShaderButtons("첫 경로", shaderRoots, true);
+        DrawShaderButtons("분류", shaderRoots, true);
         DrawShaderButtons("셰이더", shaderNames, false);
         EditorGUILayout.EndScrollView();
         GUILayout.EndVertical();
@@ -1152,9 +1226,9 @@ public class _Bookmark : EditorWindow
 
     private GUIContent ShaderFilterContent(string value, List<string> values, bool root)
     {
-        string text = value.Length == 0 ? "전체" : (root ? value : value.Substring(value.LastIndexOf('/') + 1));
-        if (!root && value.Length > 0 && values.Count(v => v.Substring(v.LastIndexOf('/') + 1) == text) > 1) text = value;
-        return new GUIContent(text, value.Length == 0 ? "모든 셰이더" : value);
+        if (value.Length == 0) return new GUIContent("전체", root ? "모든 분류" : "선택한 분류의 모든 셰이더");
+        string tooltip = !root && shaderNameTooltips.TryGetValue(value, out var paths) ? paths : value;
+        return new GUIContent(value, tooltip);
     }
 
     private float MeasureShaderButtons(List<string> values, bool root)
